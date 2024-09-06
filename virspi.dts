@@ -1,0 +1,22 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	fragment@0 {
+		target-path = "/soc/spi@7e204000";
+
+		__overlay__ {
+			// status = "okay"; 
+			#address-cells=<1>;
+			#size-cells=<0>;
+			foo_spi: foo_spi@0 {
+				reg=<0>; // CS=0 
+				status="ok";
+				compatible="foo,foo_spi";
+				spi-max-frequency=<10000000>; 
+			};
+		}; 	
+	};
+};

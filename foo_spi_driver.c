@@ -1,0 +1,214 @@
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/spi/spi.h>
+#include <linux/sysfs.h>
+#include <linux/delay.h>
+
+#include "MFRC522.h" 
+
+#define BUF_LEN 4 
+
+struct foo_sdev_data {
+	struct spi_device *sdev;
+	struct spi_controller *scont;
+	unsigned char cmd; 	
+	unsigned char wdata;
+	
+	uint8_t atoa_buf[2];
+	uint8_t frame_buf[9]; // CMD, NVM, UID0~3, BCC, CRC_A(2byte) = 9byte
+	uint8_t sak_buf[3];
+};
+
+/* attributes 
+ * --------------------------------------------------------------------------
+ * */ 
+ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf) 
+{
+	printk("%s: Called\n", __func__);
+	struct foo_sdev_data *data; 
+	struct spi_controller *scont;
+	struct spi_device *spi; 
+	int ret = -1; 
+	uint8_t readbuf[BUF_LEN];  
+	uint8_t writebuf[BUF_LEN];
+
+	data = dev->driver_data;
+	if (!data) {
+		printk("%s: driver_data is NULL\n", __func__); 
+		return 0; 
+	}
+	scont = data->scont;
+	spi = data->sdev; 
+	if (!spi) {
+		printk("%s: spi_device is NULL\n", __func__);
+		return 0;
+	}
+
+	ret = spi_w8r8(spi, data->cmd);
+	if (ret < 0) {
+		printk("%s: spi_w8r8 FAILED\n", __func__);
+		return 0;
+	}
+	
+
+	return scnprintf(buf, PAGE_SIZE, "tx:%02x, rx:0x%02x\n", data->cmd, ret);
+}
+
+ssize_t DEBUG_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret; 
+	struct foo_sdev_data *data;
+	struct spi_device *spi;
+	unsigned char tmp_cmd; 
+
+	data = dev->driver_data;
+	spi = data->sdev; 
+	ret = kstrtou8(buf, 16, &tmp_cmd);
+	if (ret < 0) {
+		printk("%s: kstrtoint FAILED\n", __func__);
+		return count;
+	}
+
+	if (0x80 & tmp_cmd) {
+		// its for read command that update data->cmd; 
+		data->cmd = tmp_cmd;
+		printk("%s: input:%s stored:%02x\n", __func__, buf, tmp_cmd);
+		return count;
+	} 
+
+	// its for write command and buf is address and transmit random number to MFRC522
+	ret = spi_write(spi, &(data->wdata), 1); 
+	if (ret < 0) {
+		printk("%s: spi_write FAILED\n", __func__);
+	}
+	return count;
+}
+
+// struct device_attribute dev_attr_name = {...}; 
+DEVICE_ATTR_RW(DEBUG);
+
+static struct attribute *DEBUG_attrs[] = {
+	&dev_attr_DEBUG.attr, 
+	NULL
+};
+
+ATTRIBUTE_GROUPS(DEBUG); // DEBUG_groups 
+
+/* driver 
+ * -------------------------------------------------------------------------------
+ * */ 
+int foo_spi_probe(struct spi_device *spi) 
+{
+	printk("%s: =============== probe started ==============\n", __func__); 
+	int ret = 0;
+	int cnt; 
+	struct foo_sdev_data *data; 
+
+	/* make driver data */ 
+	data = devm_kzalloc(&spi->dev, sizeof(struct foo_sdev_data), GFP_KERNEL); 
+	if (!data) {
+		printk("%s: devm_kzalloc FAILED\n", __func__);
+		return 0;
+	}
+
+	spi->mode = SPI_MODE_0;
+	data->sdev = spi; 
+	data->scont = spi->controller; 
+	data->cmd = 0x92;
+	data->wdata = 0x28;
+
+	dev_set_drvdata(&spi->dev, data); 
+
+	/**** Get ATOA, UID, SAK process ****/ 
+	MFRC522_Init(spi);
+
+	MFRC522_AntennaOn(spi);
+
+	/* args = spi, buf, buflen, responsebuf, responsebuflen, bitframing */ 
+	data->frame_buf[0] = PICC_CMD_REQA; 
+	ret = MFRC522_Transceive(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07); 
+	if (ret < 0) {
+		return -1;
+	}
+	
+	/* 3. Run Anti-collision Loop to get UID */
+	data->frame_buf[0] = PICC_CMD_SEL_CL1; 	
+	data->frame_buf[1] = 0x20;/* response should be stored in framebuf[2] & 0bit = 0x20*/ 
+	MFRC522_clrRegMask(spi, CollReg, 0x80); // clear received bit after collision
+	MFRC522_setRegMask(spi, BitFramingReg, 0x00); // RxAlign & TxLastBit == 0x00
+	ret = MFRC522_Transceive(spi, data->frame_buf, 2, &(data->frame_buf[2]), 5, 0x00); 
+
+	/***** Calculate CRC ******/ 
+	data->frame_buf[0] = PICC_CMD_SEL_CL1;
+	data->frame_buf[1] = 0x70; 	
+	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
+	
+	/****** SELECT ******/ 	
+	MFRC522_Transceive(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
+
+	ret = MFRC522_read1byte(spi, 0x06);
+	printk("ErrorReg=0x%02x\n", ret); 
+
+	printk("ATOA: 0x%02x %02x\n", data->atoa_buf[0], data->atoa_buf[1]); 
+	printk("SAK: 0x%02x %02x %02x\n", data->sak_buf[0], data->sak_buf[1], data->sak_buf[2]); 
+	for(int i = 0; i < 9; i++) {
+		printk("FRAME: 0x%02x\n", data->frame_buf[i]);
+	}
+
+	/****** make Attribute ******/ 
+	ret = sysfs_create_groups(&spi->dev.kobj, DEBUG_groups);
+	if (ret < 0) {
+		printk("%s: sysfs_create_groups FAILED!! %d\n", __func__, ret); 
+	}
+
+	printk("spi: spi's constoller=%s, max_speed_hz=%u, chip_select=%u, bits_per_word=%u, mode=%u, bus_num=%u\n", spi->controller->dev.kobj.name, spi->max_speed_hz, spi->chip_select, spi->bits_per_word, spi->mode, spi->controller->bus_num);
+
+	return ret; 
+}
+
+void foo_spi_remove(struct spi_device *spi) 
+{
+	printk("%s: \n", __func__);
+	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
+}
+
+const struct of_device_id of_spi_table[] = {
+	{.compatible="foo,foo_spi", }, 
+};
+
+const struct spi_device_id id_spi_table[] = {
+	{.name="foo_spi", },
+};
+
+struct spi_driver foo_spi_drv = {
+	.probe=foo_spi_probe,
+	.remove=foo_spi_remove,
+	.id_table =id_spi_table,
+	.driver= {
+		.name="foo_spi_drv",
+		.of_match_table=of_spi_table,
+	}, 
+};
+
+/* module 
+ * ------------------------------------------------------------------
+ * */ 
+static int __init foo_spi_drv_init(void) 
+{
+	int ret = 0;
+	ret = spi_register_driver(&foo_spi_drv);
+	if (ret < 0) {
+		printk("%s: spi_register_driver() FAILED\n", __func__);
+	}	
+	return ret;
+}
+
+static void __exit foo_spi_drv_exit(void)
+{
+	spi_unregister_driver(&foo_spi_drv);
+}
+
+module_init(foo_spi_drv_init);
+module_exit(foo_spi_drv_exit);
+MODULE_LICENSE("GPL");
