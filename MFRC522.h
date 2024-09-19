@@ -116,10 +116,12 @@ void MFRC522_AntennaOn(struct spi_device *spi) {
 		printk("read TxControlReg Failed\n"); 
 	}
 	/* 0x03 = Enable Tx1, Tx2 output signal */ 
-	printk("Init: TxControlReg:0x%02x 0x03 should be set\n", ret);
 	if ((ret & 0x03) != 0x03) {	
 		ret = MFRC522_write1byte(spi, TxControlReg, (ret | 0x03));
 	}
+
+	ret = MFRC522_read1byte(spi, TxControlReg);
+	printk("%s: TxControlReg:0x%02x 0x03 should be set\n", __func__, ret);
 }
 
 int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferlen, uint8_t *responsebuf, uint8_t responsebuflen, uint8_t bitframing) {
@@ -218,5 +220,17 @@ int MFRC522_CalCRC(struct spi_device *spi, uint8_t *buffer, uint8_t bufferlen, u
 	ret = MFRC522_read1byte(spi, CRCResultRegH); // MSB 
 	responsebuf[1] = ret;
 	printk("CRC: responsebuf 0x%02x\n", ret);
+	return 0; 
+}
+
+int MFRC522_REQA(struct spi_device *spi, uint8_t *buf, uint8_t buflen, uint8_t *responsebuf, uint8_t responsebuflen, uint8_t bitframing)
+{	
+	int ret; 
+	buf[0] = PICC_CMD_REQA;
+	ret = MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
+	if (ret < 0) {
+		printk("%s: REQA Failed\n", __func__);
+		return -1;
+	}
 	return 0; 
 }

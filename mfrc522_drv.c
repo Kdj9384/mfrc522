@@ -120,19 +120,13 @@ int mfrc522_probe(struct spi_device *spi)
 
 	dev_set_drvdata(&spi->dev, data); 
 
-	/**** Get ATOA, UID, SAK process ****/ 
 	MFRC522_Init(spi);
 	printk("%s:Init() complete\n", __func__);
 
 	MFRC522_AntennaOn(spi);
 	printk("%s:AntennaOn() complete\n", __func__);
-
-	/* Transceive args = spi, buf, buflen, responsebuf, responsebuflen, bitframing */ 
-	data->frame_buf[0] = PICC_CMD_REQA; 
-	ret = MFRC522_Transceive(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07); 
-	if (ret < 0) {
-		return -1;
-	}
+ 
+	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
 	printk("%s:REQA complete\n", __func__);
 	
 	/* 3. Run Anti-collision Loop to get UID */
