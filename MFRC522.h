@@ -234,3 +234,62 @@ int MFRC522_REQA(struct spi_device *spi, uint8_t *buf, uint8_t buflen, uint8_t *
 	}
 	return 0; 
 }
+
+/* anti collision loop
+ * frame[0] = CMD
+ * frame[1] = NVB
+ * frame[2:5] = UID
+ * frame[6] = BCC 
+ */ 
+void  MFRC522_anti_col_loop(struct spi_device *spi, uint8_t *buf, uint8_t buflen) 
+{
+	int ret; 
+	uint8_t collpos = 0;
+	uint8_t knownbits = 0;
+	uint8_t knownindex = buflen;
+
+	uint8_t bitframing = 0; 
+
+	uint8_t collpos_byteindex = 0; 
+	uint8_t collpos_bitindex = 0; 
+
+	uint8_t responselen = 5; 
+
+	buf[0] = PICC_CMD_SEL_CL1; 
+	buf[1] = 0x20; // init value for NVB
+
+	MFRC522_clrRegMask(spi, CollReg, 0x80); // clear received bit after collision
+	MFRC522_setRegMask(spi, BitFramingReg, 0x00); // RxAlign & TxLastBit == 0x00
+
+	// loop 
+	while (knownbits < 32) {
+		ret = MFRC522_Transceive(spi, buf, knownindex, &(buf[knownindex]), responselen, bitframing);
+
+		ret = MFRC522_read1byte(spi, ErrorReg);
+		if (ret & 0x08) {
+			printk("%s: ErrorReg, CollErr occur\n", __func__);
+		}
+
+		ret = MFRC522_read1byte(spi, CollReg);
+		if ((ret & 0x20) == 0x20) {
+			// no collision, all uid, 32bits are known
+			printk("%s: CollReg, no valid collpos\n", __func__);
+			knownbits = 32; 
+			break;
+		}
+
+		collpos = (ret & 0x1F); 
+		collpos_bitindex = collpos % 8; 
+		collpos_byteindex = collpos / 8;
+		knownbits = collpos;
+		knownindex = knownindex + collpos_byteindex; 
+
+		// update NVB 
+		buf[1] = buf[1] + (collpos_byteindex << 4);
+		buf[1] = buf[1] + collpos_bitindex;
+	
+		// rxalign, txlastbit setting 
+		bitframing = (collpos_bitindex << 4) + collpos_bitindex; 
+	}
+}
+

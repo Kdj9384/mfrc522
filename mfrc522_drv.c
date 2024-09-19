@@ -129,13 +129,9 @@ int mfrc522_probe(struct spi_device *spi)
 	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
 	printk("%s:REQA complete\n", __func__);
 	
-	/* 3. Run Anti-collision Loop to get UID */
-	data->frame_buf[0] = PICC_CMD_SEL_CL1; 	
-	data->frame_buf[1] = 0x20;/* response should be stored in framebuf[2] & 0bit = 0x20*/ 
-	MFRC522_clrRegMask(spi, CollReg, 0x80); // clear received bit after collision
-	MFRC522_setRegMask(spi, BitFramingReg, 0x00); // RxAlign & TxLastBit == 0x00
-	ret = MFRC522_Transceive(spi, data->frame_buf, 2, &(data->frame_buf[2]), 5, 0x00); 
-
+	// spi, buf, buflen, responsebuf, responsebuflen
+	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
+	
 	/***** Calculate CRC ******/ 
 	data->frame_buf[0] = PICC_CMD_SEL_CL1;
 	data->frame_buf[1] = 0x70; 	
