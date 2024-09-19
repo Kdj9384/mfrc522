@@ -1,5 +1,5 @@
 # mfrc522
-mfrc522 spi driver
+test mfrc522 spi driver
 
 ## Terms of Abbreviations
 ATQA : Answer to Reqeust Type A   
@@ -22,6 +22,10 @@ loop until PCD receive perfect UID
 
 ## Select & SAK
 with full UID, BCC, CRC, select one PICC. get SAK from it.
+
+## TODO 
+- Cascade Level different behavior.
+- test anti-collision loop that it perfectly works. 
 
 ## Reference 
 - https://en.wikipedia.org/wiki/Serial_Peripheral_Interface
