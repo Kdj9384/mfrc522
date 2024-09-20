@@ -14,14 +14,39 @@ RATS : Request for Answer To Select
 SAK : Select ACK   
 SL : Security Level  
 
-## REQA & ATOA
-makes PICC ready 
+## MFRC522 드라이버 Features
+- 디바이스 트리 오버레이
+- Supports ISO/IEC 14443 A/MIFARE and NTAG
+    - ISO/IEC 14443-1,2,3,4
+        - 카드의 물리적 사양(1), 라디오 규격(2), 초기화 및 충돌방지(3), 전송 프로토콜(4)
 
-## Anti-collision Loop 
-loop until PCD receive perfect UID
 
-## Select & SAK
-with full UID, BCC, CRC, select one PICC. get SAK from it.
+## ISO/IEC 14443-3 A
+- PICC Activation Sequence
+    - send REQA, receive ATQA
+- Anti-collision Loop
+    - ErrorReg
+        - ErrorReg[3] = CollErr; a collision detected, value is “1”.
+    - CollReg
+        - CollReg[7] = ValueAfterCol
+            - if ValueAfterCol=0, 충돌 후에는 모든 수신된 비트 초기화
+        - CollReg[5] = CollPosNotValid
+            - if CollPosNotValid=1, 충돌X.
+            - if CollPosNotVaild=0, 충돌O, CollPos 활성화
+        - CollReg[4:0] = CollPos
+    - BitFramingReg
+        - BitFramingReg[4:6] = RxAlign
+            - 첫번째 비트를 FIFO의 몇번째 포지션에 놓아야 할지 지정.
+        - BitFramingReg[0:2] = TxLastBit
+            - 전송할 마지막 바이트에서 몇번째 비트까지가 valid 한지 지정.
+- Select PICC  
+  - with full UID, BCC, CRC, select one PICC. get SAK from it.
+  - Select
+      - NVB = 0x70; Calculate CRC_A; 
+  - 3 byte response
+      - first byte = SAK value
+        - SAK 레이아웃에 따라 이후 작업진행  
+      - second, third byte = CRC_A value
 
 ## TODO 
 - Cascade Level different behavior.
