@@ -129,10 +129,12 @@ int mfrc522_probe(struct spi_device *spi)
 	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
 	printk("%s:REQA complete\n", __func__);
 	
-	// spi, buf, buflen, responsebuf, responsebuflen
+	// spi, buf, buflen
+	printk("%s: Anti-collision loop started\n", __func__);
 	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
 	
 	/***** Calculate CRC ******/ 
+	printk("%s: CalCRC started\n", __func__);
 	data->frame_buf[0] = PICC_CMD_SEL_CL1;
 	data->frame_buf[1] = 0x70; 	
 	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
