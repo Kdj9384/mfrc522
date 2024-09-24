@@ -14,7 +14,7 @@
 			foo_spi: foo_spi@0 {
 				reg=<0>; // CS=0 
 				status="ok";
-				compatible="foo,foo_spi";
+				compatible="nxp,mfrc522_test";
 				spi-max-frequency=<10000000>; 
 			};
 		}; 	

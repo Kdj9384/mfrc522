@@ -98,7 +98,7 @@ ATTRIBUTE_GROUPS(DEBUG); // DEBUG_groups
 /* driver 
  * -------------------------------------------------------------------------------
  * */ 
-int foo_spi_probe(struct spi_device *spi) 
+int mfrc522_probe(struct spi_device *spi) 
 {
 	printk("%s: =============== probe started ==============\n", __func__); 
 	int ret = 0;
@@ -120,26 +120,21 @@ int foo_spi_probe(struct spi_device *spi)
 
 	dev_set_drvdata(&spi->dev, data); 
 
-	/**** Get ATOA, UID, SAK process ****/ 
 	MFRC522_Init(spi);
+	printk("%s:Init() complete\n", __func__);
 
 	MFRC522_AntennaOn(spi);
-
-	/* args = spi, buf, buflen, responsebuf, responsebuflen, bitframing */ 
-	data->frame_buf[0] = PICC_CMD_REQA; 
-	ret = MFRC522_Transceive(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07); 
-	if (ret < 0) {
-		return -1;
-	}
+	printk("%s:AntennaOn() complete\n", __func__);
+ 
+	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
+	printk("%s:REQA complete\n", __func__);
 	
-	/* 3. Run Anti-collision Loop to get UID */
-	data->frame_buf[0] = PICC_CMD_SEL_CL1; 	
-	data->frame_buf[1] = 0x20;/* response should be stored in framebuf[2] & 0bit = 0x20*/ 
-	MFRC522_clrRegMask(spi, CollReg, 0x80); // clear received bit after collision
-	MFRC522_setRegMask(spi, BitFramingReg, 0x00); // RxAlign & TxLastBit == 0x00
-	ret = MFRC522_Transceive(spi, data->frame_buf, 2, &(data->frame_buf[2]), 5, 0x00); 
-
+	// spi, buf, buflen
+	printk("%s: Anti-collision loop started\n", __func__);
+	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
+	
 	/***** Calculate CRC ******/ 
+	printk("%s: CalCRC started\n", __func__);
 	data->frame_buf[0] = PICC_CMD_SEL_CL1;
 	data->frame_buf[1] = 0x70; 	
 	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
@@ -167,26 +162,26 @@ int foo_spi_probe(struct spi_device *spi)
 	return ret; 
 }
 
-void foo_spi_remove(struct spi_device *spi) 
+void mfrc522_remove(struct spi_device *spi) 
 {
 	printk("%s: \n", __func__);
 	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
 }
 
 const struct of_device_id of_spi_table[] = {
-	{.compatible="foo,foo_spi", }, 
+	{.compatible="nxp,mfrc522_test", }, 
 };
 
 const struct spi_device_id id_spi_table[] = {
-	{.name="foo_spi", },
+	{.name="mfrc_test", },
 };
 
-struct spi_driver foo_spi_drv = {
-	.probe=foo_spi_probe,
-	.remove=foo_spi_remove,
+struct spi_driver mfrc522_drv = {
+	.probe=mfrc522_probe,
+	.remove=mfrc522_remove,
 	.id_table =id_spi_table,
 	.driver= {
-		.name="foo_spi_drv",
+		.name="mfrc522_drv",
 		.of_match_table=of_spi_table,
 	}, 
 };
@@ -194,21 +189,21 @@ struct spi_driver foo_spi_drv = {
 /* module 
  * ------------------------------------------------------------------
  * */ 
-static int __init foo_spi_drv_init(void) 
+static int __init mfrc522_drv_init(void) 
 {
 	int ret = 0;
-	ret = spi_register_driver(&foo_spi_drv);
+	ret = spi_register_driver(&mfrc522_drv);
 	if (ret < 0) {
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
 	return ret;
 }
 
-static void __exit foo_spi_drv_exit(void)
+static void __exit mfrc522_drv_exit(void)
 {
-	spi_unregister_driver(&foo_spi_drv);
+	spi_unregister_driver(&mfrc522_drv);
 }
 
-module_init(foo_spi_drv_init);
-module_exit(foo_spi_drv_exit);
+module_init(mfrc522_drv_init);
+module_exit(mfrc522_drv_exit);
 MODULE_LICENSE("GPL");

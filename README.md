@@ -1,5 +1,5 @@
 # mfrc522
-mfrc522 spi driver
+test mfrc522 spi driver
 
 ## Terms of Abbreviations
 ATQA : Answer to Reqeust Type A   
@@ -20,7 +20,6 @@ SL : Security Level
 - Supports ISO/IEC 14443 A/MIFARE and NTAG
     - ISO/IEC 14443-1,2,3,4
         - 카드의 물리적 사양(1), 라디오 규격(2), 초기화 및 충돌방지(3), 전송 프로토콜(4)
-
 
 ## ISO/IEC 14443-3 A
 - PICC Activation Sequence
@@ -50,7 +49,6 @@ SL : Security Level
       - second, third byte = CRC_A value
 
 
-  
 ## Reference 
 - https://en.wikipedia.org/wiki/Serial_Peripheral_Interface
 - https://m.blog.naver.com/ittalentdonation/221215499032

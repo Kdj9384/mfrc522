@@ -1,4 +1,4 @@
-obj-m += foo_spi_driver.o 
+obj-m += mfrc522_drv.o 
 
 KDIR := /lib/modules/$(shell uname -r)/build
 all:

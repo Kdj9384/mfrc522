@@ -116,10 +116,12 @@ void MFRC522_AntennaOn(struct spi_device *spi) {
 		printk("read TxControlReg Failed\n"); 
 	}
 	/* 0x03 = Enable Tx1, Tx2 output signal */ 
-	printk("Init: TxControlReg:0x%02x 0x03 should be set\n", ret);
 	if ((ret & 0x03) != 0x03) {	
 		ret = MFRC522_write1byte(spi, TxControlReg, (ret | 0x03));
 	}
+
+	ret = MFRC522_read1byte(spi, TxControlReg);
+	printk("%s: TxControlReg:0x%02x 0x03 should be set\n", __func__, ret);
 }
 
 int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferlen, uint8_t *responsebuf, uint8_t responsebuflen, uint8_t bitframing) {
@@ -181,6 +183,7 @@ int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferle
 			break;
 		}
 		responsebuf[i] = MFRC522_read1byte(spi, FIFODataReg);
+		printk("%s: response=%02x\n", __func__, responsebuf[i]);
 	}
 	return 0; 
 }
@@ -220,3 +223,97 @@ int MFRC522_CalCRC(struct spi_device *spi, uint8_t *buffer, uint8_t bufferlen, u
 	printk("CRC: responsebuf 0x%02x\n", ret);
 	return 0; 
 }
+
+int MFRC522_REQA(struct spi_device *spi, uint8_t *buf, uint8_t buflen, uint8_t *responsebuf, uint8_t responsebuflen, uint8_t bitframing)
+{	
+	int ret; 
+	buf[0] = PICC_CMD_REQA;
+	ret = MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
+	if (ret < 0) {
+		printk("%s: REQA Failed\n", __func__);
+		return -1;
+	}
+
+	// print 
+	for(int i = 0; i < responsebuflen; i++) {
+		printk("ATOA: %02x\n", responsebuf[i]);
+	}
+	return 0; 
+}
+
+/* anti collision loop
+ * frame[0] = CMD
+ * frame[1] = NVB
+ * frame[2:5] = UID
+ * frame[6] = BCC 
+ */ 
+void  MFRC522_anti_col_loop(struct spi_device *spi, uint8_t *buf, uint8_t buflen) 
+{
+	int ret; 
+	uint8_t collpos = 0;
+	uint8_t knownbits = 0;
+	uint8_t knownindex = 2; // the index that the collision occur in frame or the response start posiion in frame. 
+
+	uint8_t bitframing = 0; 
+
+	uint8_t collpos_byteindex = 0; 
+	uint8_t collpos_bitindex = 0; 
+
+	uint8_t responselen = 5; 
+
+	uint8_t mergeflag = 0;
+	uint8_t mergeval = 0; 
+
+	buf[0] = PICC_CMD_SEL_CL1; 
+	buf[1] = 0x20; // init value for NVB
+
+	MFRC522_clrRegMask(spi, CollReg, 0x80); // clear received bit after collision
+	MFRC522_setRegMask(spi, BitFramingReg, 0x00); // RxAlign & TxLastBit == 0x00
+
+	// loop 
+	while (knownbits < 32) {
+		printk("%s: LOOP START: NVM=%02x\n", __func__, buf[1]);
+		ret = MFRC522_Transceive(spi, buf, buflen, &(buf[knownindex]), responselen, bitframing);
+
+		ret = MFRC522_read1byte(spi, ErrorReg);
+		if (ret & 0x08) {
+			printk("%s: ErrorReg, CollErr occur\n", __func__);
+		}
+
+		ret = MFRC522_read1byte(spi, CollReg);
+		printk("%s: CollReg = %02x\n", __func__, ret);
+
+		if ((ret & 0x20) == 0x20) {
+			// no collision, all uid, 32bits are known
+			printk("%s: no collision, ret=%02x\n", __func__, ret);
+			knownbits = 32; 
+		}
+
+		// merge the collision part. 
+		buf[knownindex] = buf[knownindex] + mergeval; 
+
+		if (knownbits < 32) {
+		collpos = (ret & 0x1F); 
+		collpos_bitindex = collpos % 8; 
+		collpos_byteindex = collpos / 8;
+		knownbits = collpos;
+		knownindex = knownindex + collpos_byteindex; 
+		buflen = buflen + collpos_byteindex + 1; 
+
+		mergeval = buf[knownindex]; 
+
+		// update NVB 
+		buf[1] = buf[1] + (collpos_byteindex << 4);
+		buf[1] = buf[1] + collpos_bitindex;
+	
+		// rxalign, txlastbit setting 
+		bitframing = (collpos_bitindex << 4) + collpos_bitindex; 
+		printk("%s: CollPos=%02x, knownbits=%02x, knownindex=%02x, NVM=%02x, BitFramingReg=%02x\n", __func__, collpos, knownbits, knownindex, buf[1], bitframing);
+		
+		printk("%s: LOOP END\n", __func__);
+		}
+
+
+	}
+}
+
