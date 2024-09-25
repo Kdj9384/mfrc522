@@ -86,9 +86,9 @@ uint8_t MFRC522_writenbytes(struct spi_device *spi, uint8_t reg, uint8_t* buf, u
 {
 	uint8_t xfer_buf[buflen+1]; 
 	xfer_buf[0] = (reg << 1) & 0x7e; 
-	memcpy(xfer_buf[1], buf, buflen); 
+	memcpy(&xfer_buf[1], buf, buflen); 
 
-	struct spi_tranfer xfer = {
+	struct spi_transfer xfer = {
 		.tx_buf = xfer_buf, 
 		.len = buflen+1, 	
 	}; 
@@ -153,9 +153,12 @@ int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferle
 	MFRC522_setRegMask(spi, FIFOLevelReg, 0x80);
 
 	/* send PICC_CMD to FIFO */ 
+	/*
 	for(int i = 0; i < bufferlen; i++) {
 		MFRC522_write1byte(spi, FIFODataReg, buffer[i]);
 	}
+	*/ 
+	MFRC522_writenbytes(spi, FIFODataReg, buffer, bufferlen); 
 
 	/* setting proper bitframing */ 
 	MFRC522_write1byte(spi, BitFramingReg, bitframing);
