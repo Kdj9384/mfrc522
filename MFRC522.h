@@ -82,6 +82,19 @@ int MFRC522_write1byte(struct spi_device *spi, uint8_t reg, uint8_t data)
 	return ret; 
 }
 
+uint8_t MFRC522_writenbytes(struct spi_device *spi, uint8_t reg, uint8_t* buf, uint8_t buflen)
+{
+	uint8_t xfer_buf[buflen+1]; 
+	xfer_buf[0] = (reg << 1) & 0x7e; 
+	memcpy(xfer_buf[1], buf, buflen); 
+
+	struct spi_tranfer xfer = {
+		.tx_buf = xfer_buf, 
+		.len = buflen+1, 	
+	}; 
+	return spi_sync_transfer(spi, &xfer, 1); 
+}
+
 int  MFRC522_read1byte(struct spi_device *spi, uint8_t reg)
 {
 	int ret = 0;
