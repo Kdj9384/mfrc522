@@ -109,6 +109,16 @@ int  MFRC522_read1byte(struct spi_device *spi, uint8_t reg)
 	return ret;
 }
 
+uint8_t MFRC522_readnbytes(struct spi_device *spi, uint8_t reg, uint8_t *recv_buf, uint8_t n) 
+{
+	uint8_t xfer_buf[n];
+	uint8_t addr = (0x80 | ((reg << 1) & 0x7e));
+	for(int i = 0; i < n; i++) {
+		xfer_buf[i] = addr;
+	}
+	// Not DMA-Safe, 0 for success, copy occur so performance-sensitive or bulk buffer should use spi_sync, async calls with DMA-safe buffer. 
+	return spi_write_then_read(spi, xfer_buf, n, recv_buf, n);
+}
 
 void MFRC522_Init(struct spi_device *spi) {
 	int ret; 
@@ -192,6 +202,7 @@ int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferle
 	printk("%s: Size of response:%02x\n", __func__, ret);
 
 	/* read the data from FIFO */ 
+
 	for(int i = 0; i < ret; i++) {
 		if (i >= responsebuflen) {
 			printk("%s: FIFOLevel is bigger than response buffer lenght\n", __func__);
@@ -201,7 +212,13 @@ int MFRC522_Transceive(struct spi_device *spi, uint8_t *buffer, uint8_t bufferle
 		responsebuf[i] = MFRC522_read1byte(spi, FIFODataReg);
 		printk("%s: response=%02x\n", __func__, responsebuf[i]);
 	}
+	
+	/*
+	MFRC522_readnbytes(spi, FIFODataReg, responsebuf, ret);
+	*responsebuf << 8; 
+	*/
 	return 0; 
+
 }
 
 /* Store CRC_A 2byte on responsebuf buffer */ 
