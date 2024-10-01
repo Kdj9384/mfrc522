@@ -13,6 +13,7 @@ REQA : REQuest Type A
 RATS : Request for Answer To Select   
 SAK : Select ACK   
 SL : Security Level  
+PPS : Protocol Parameter Selection
 
 
 ## MFRC522 드라이버 Features
@@ -50,7 +51,6 @@ SL : Security Level
 
 
 ## Reference 
-- https://en.wikipedia.org/wiki/Serial_Peripheral_Interface
 - https://m.blog.naver.com/ittalentdonation/221215499032
 - https://www.nxp.com/docs/en/data-sheet/MFRC522.pdf
 - https://github.com/libdriver/mfrc522/blob/main/src/driver_mfrc522.h#L361
