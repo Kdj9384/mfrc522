@@ -191,12 +191,18 @@ struct spi_driver mfrc522_drv = {
  * */ 
 static int __init mfrc522_drv_init(void) 
 {
-	int ret = 0;
-	ret = spi_register_driver(&mfrc522_drv);
-	if (ret < 0) {
+	int status;
+
+	// register char device 
+	status = register_chrdev(); 
+
+
+	// register spi device 
+	status = spi_register_driver(&mfrc522_drv);
+	if (status < 0) {
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
-	return ret;
+	return status;
 }
 
 static void __exit mfrc522_drv_exit(void)
