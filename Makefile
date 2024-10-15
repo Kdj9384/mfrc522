@@ -1,4 +1,5 @@
-obj-m += mfrc522_drv.o 
+obj-m += spi_mfrc522_drv.o
+spi_mfrc522_drv-objs := mfrc522_drv.o MFRC522.o 
 
 KDIR := /lib/modules/$(shell uname -r)/build
 all:

@@ -1,9 +1,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/spi/spi.h>
 #include <linux/sysfs.h>
-#include <linux/delay.h>
 
 #include "MFRC522.h" 
 
@@ -30,8 +28,6 @@ ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct spi_controller *scont;
 	struct spi_device *spi; 
 	int ret = -1; 
-	uint8_t readbuf[BUF_LEN];  
-	uint8_t writebuf[BUF_LEN];
 
 	data = dev->driver_data;
 	if (!data) {
@@ -102,7 +98,6 @@ int mfrc522_probe(struct spi_device *spi)
 {
 	printk("%s: =============== probe started ==============\n", __func__); 
 	int ret = 0;
-	int cnt; 
 	struct foo_sdev_data *data; 
 
 	/* make driver data */ 
@@ -168,6 +163,14 @@ void mfrc522_remove(struct spi_device *spi)
 	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
 }
 
+
+
+static const struct file_operations mfrc522_fops = {
+	//.owner = THIS_MODULE, 
+	//.read = spi_mfrc522_readuid,
+	//.open = spi_mfrc522_setup,
+};
+
 const struct of_device_id of_spi_table[] = {
 	{.compatible="nxp,mfrc522_test", }, 
 };
@@ -193,15 +196,18 @@ static int __init mfrc522_drv_init(void)
 {
 	int status;
 
-	// register char device 
-	status = register_chrdev(); 
-
+	// spi major number = 153
+	status = register_chrdev(153, "mfrc522", &mfrc522_fops); 
+	if (status < 0) {
+		return status;
+	}
 
 	// register spi device 
 	status = spi_register_driver(&mfrc522_drv);
 	if (status < 0) {
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
+
 	return status;
 }
 
