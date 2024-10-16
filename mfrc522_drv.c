@@ -18,6 +18,8 @@ struct foo_sdev_data {
 	uint8_t sak_buf[3];
 };
 
+
+
 /* attributes 
  * --------------------------------------------------------------------------
  * */ 
@@ -91,9 +93,11 @@ static struct attribute *DEBUG_attrs[] = {
 
 ATTRIBUTE_GROUPS(DEBUG); // DEBUG_groups 
 
-/* driver 
- * -------------------------------------------------------------------------------
- * */ 
+
+
+static struct class *mfrc522_class;
+
+/* ------------------------------------------------------------------------------- */ 
 int mfrc522_probe(struct spi_device *spi) 
 {
 	printk("%s: =============== probe started ==============\n", __func__); 
@@ -112,6 +116,14 @@ int mfrc522_probe(struct spi_device *spi)
 	data->scont = spi->controller; 
 	data->cmd = 0x92;
 	data->wdata = 0x28;
+
+	// TODO: should make it runnable, it has error on making device with given class name 
+	// TODO: need to modify the formatter & lock for reentrant 
+	struct device *dev;
+	dev = device_create(mfrc522_class, &spi->dev, 154, data, "mfrc522%d", 0);
+	if (IS_ERR(dev)) {
+		printk("%s: device_create error %ld\n", __func__, PTR_ERR(dev));
+	}
 
 	dev_set_drvdata(&spi->dev, data); 
 
@@ -164,11 +176,22 @@ void mfrc522_remove(struct spi_device *spi)
 }
 
 
+static ssize_t spi_mfrc522_readuid(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+{
+	ssize_t status = -ENXIO; 
+	return status;
+}
+
+static int  spi_mfrc522_setup(struct inode *inode, struct file *filp)
+{
+	ssize_t status = -ENXIO;
+	return status;
+}
 
 static const struct file_operations mfrc522_fops = {
-	//.owner = THIS_MODULE, 
-	//.read = spi_mfrc522_readuid,
-	//.open = spi_mfrc522_setup,
+	.owner = THIS_MODULE, 
+	.read = spi_mfrc522_readuid,
+	.open = spi_mfrc522_setup,
 };
 
 const struct of_device_id of_spi_table[] = {
@@ -196,15 +219,22 @@ static int __init mfrc522_drv_init(void)
 {
 	int status;
 
-	// spi major number = 153
-	status = register_chrdev(153, "mfrc522", &mfrc522_fops); 
+	
+	status = register_chrdev(154, "mfrc522_cdev", &mfrc522_fops); 
 	if (status < 0) {
 		return status;
 	}
 
-	// register spi device 
+	mfrc522_class = class_create("mfrc522_class");
+	if (IS_ERR(mfrc522_class)) {
+		unregister_chrdev(154, "mfrc522_chdev");
+		return PTR_ERR(mfrc522_class);
+	}
+	
 	status = spi_register_driver(&mfrc522_drv);
 	if (status < 0) {
+		unregister_chrdev(154, "mfrc522_cdev");
+		class_destroy(mfrc522_class);
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
 
@@ -213,6 +243,8 @@ static int __init mfrc522_drv_init(void)
 
 static void __exit mfrc522_drv_exit(void)
 {
+	unregister_chrdev(154, "mfrc522_cdev"); 
+	class_destroy(mfrc522_class);
 	spi_unregister_driver(&mfrc522_drv);
 }
 
