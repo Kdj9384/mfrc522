@@ -117,14 +117,12 @@ int mfrc522_probe(struct spi_device *spi)
 	data->cmd = 0x92;
 	data->wdata = 0x28;
 
-	// TODO: should make it runnable, it has error on making device with given class name 
-	// TODO: need to modify the formatter & lock for reentrant 
 	struct device *dev;
-	dev = device_create(mfrc522_class, &spi->dev, 154, data, "mfrc522%d", 0);
+	dev = device_create(mfrc522_class, &spi->dev, MKDEV(154,0), data, "mfrc522%d", 0);
 	if (IS_ERR(dev)) {
 		printk("%s: device_create error %ld\n", __func__, PTR_ERR(dev));
+		return 0;
 	}
-
 	dev_set_drvdata(&spi->dev, data); 
 
 	MFRC522_Init(spi);
@@ -172,6 +170,7 @@ int mfrc522_probe(struct spi_device *spi)
 void mfrc522_remove(struct spi_device *spi) 
 {
 	printk("%s: \n", __func__);
+	device_destroy(mfrc522_class, MKDEV(154, 0));
 	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
 }
 
@@ -243,9 +242,9 @@ static int __init mfrc522_drv_init(void)
 
 static void __exit mfrc522_drv_exit(void)
 {
-	unregister_chrdev(154, "mfrc522_cdev"); 
+	spi_unregister_driver(&mfrc522_drv);	
 	class_destroy(mfrc522_class);
-	spi_unregister_driver(&mfrc522_drv);
+	unregister_chrdev(154, "mfrc522_cdev"); 
 }
 
 module_init(mfrc522_drv_init);
