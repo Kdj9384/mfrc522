@@ -140,8 +140,6 @@ int mfrc522_probe(struct spi_device *spi)
 	
 	/***** Calculate CRC ******/ 
 	printk("%s: CalCRC started\n", __func__);
-	data->frame_buf[0] = PICC_CMD_SEL_CL1;
-	data->frame_buf[1] = 0x70; 	
 	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
 	
 	/****** SELECT ******/ 	

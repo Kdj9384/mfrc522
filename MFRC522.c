@@ -196,6 +196,9 @@ int MFRC522_CalCRC(struct spi_device *spi, unsigned char *buffer, unsigned char 
 {
 	int cnt; int ret; 
 
+	buffer[0] = PICC_CMD_SEL_CL1;
+	buffer[1] = 0x70;
+
 	MFRC522_write1byte(spi, CommandReg, 0x00);
 	MFRC522_write1byte(spi, DivIrqReg, 0x04);
 	MFRC522_setRegMask(spi, FIFOLevelReg, 0x80);
