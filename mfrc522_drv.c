@@ -143,16 +143,16 @@ int mfrc522_probe(struct spi_device *spi)
 	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
 	
 	/****** SELECT ******/ 	
-	MFRC522_Transceive(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
-
-	ret = MFRC522_read1byte(spi, 0x06);
-	printk("ErrorReg=0x%02x\n", ret); 
-
+	MFRC522_Select(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
+	
+	
+	/*** print the result ***/ 
 	printk("ATOA: 0x%02x %02x\n", data->atoa_buf[0], data->atoa_buf[1]); 
 	printk("SAK: 0x%02x %02x %02x\n", data->sak_buf[0], data->sak_buf[1], data->sak_buf[2]); 
 	for(int i = 0; i < 9; i++) {
 		printk("FRAME: 0x%02x\n", data->frame_buf[i]);
 	}
+	
 
 	/****** make Attribute ******/ 
 	ret = sysfs_create_groups(&spi->dev.kobj, DEBUG_groups);
