@@ -35,13 +35,16 @@ int MFRC522_setRegMask(struct spi_device *spi, unsigned char reg, unsigned char 
 
 	return tmp;
 }
-int MFRC522_write1byte(struct spi_device *spi, unsigned char reg, unsigned char data) 
+
+// Return: Zero on success.
+ssize_t MFRC522_write1byte(struct spi_device *spi, unsigned char reg, unsigned char data) 
 {
-	int ret = 0; 
+	ssize_t ret = 0; 
 	unsigned char buf[2]; 
 	buf[0] = (reg << 1) & 0x7e; // 0x7e for makes MSB & LSB zero
 	buf[1] = data;
 
+	// Zero on Success, else negative error code. 
 	ret = spi_write(spi,buf, 2);
        	if (ret < 0) {
 		printk("%s: %02x, %02x FAILED\n", __func__, reg, data);
@@ -63,7 +66,8 @@ unsigned char MFRC522_writenbytes(struct spi_device *spi, unsigned char reg, uns
 	return spi_sync_transfer(spi, &xfer, 1); 
 }
 
-int  MFRC522_read1byte(struct spi_device *spi, unsigned char reg)
+// Return: unsigned value or Negative Error code  
+unsigned char  MFRC522_read1byte(struct spi_device *spi, unsigned char reg)
 {
 	int ret = 0;
 	unsigned char addr[2];
@@ -87,9 +91,10 @@ unsigned char MFRC522_readnbytes(struct spi_device *spi, unsigned char reg, unsi
 	return spi_write_then_read(spi, xfer_buf, n, recv_buf, n);
 }
 
-void MFRC522_Init(struct spi_device *spi) 
+// return: Zero on success
+ssize_t MFRC522_Init(struct spi_device *spi) 
 {
-	int ret; 
+	ssize_t ret; 
 	/* 1. Soft Reset */ 
 	ret = MFRC522_write1byte(spi, CommandReg, PCD_CMD_SOFTRESET);
 	mdelay(50);
@@ -97,11 +102,14 @@ void MFRC522_Init(struct spi_device *spi)
 	/* 2. Init rest registers */
 	ret = MFRC522_write1byte(spi, TxASKReg, 0x40);
 	ret = MFRC522_write1byte(spi, ModeReg, 0x3D);
+
+	return ret;
 }
 
-void MFRC522_AntennaOn(struct spi_device *spi) 
+// return: Zeror on success
+ssize_t  MFRC522_AntennaOn(struct spi_device *spi) 
 {
-	int ret; 
+	ssize_t ret; 
 	/* 1. Turn on Antenna */ 
 	ret = MFRC522_read1byte(spi, TxControlReg);
 	if (ret < 0) {
@@ -112,8 +120,7 @@ void MFRC522_AntennaOn(struct spi_device *spi)
 		ret = MFRC522_write1byte(spi, TxControlReg, (ret | 0x03));
 	}
 
-	ret = MFRC522_read1byte(spi, TxControlReg);
-	printk("%s: TxControlReg:0x%02x 0x03 should be set\n", __func__, ret);
+	return ret;
 }
 
 int MFRC522_Transceive(struct spi_device *spi, unsigned char *buffer, unsigned char bufferlen, unsigned char *responsebuf, unsigned char responsebuflen, unsigned char bitframing) 
@@ -183,12 +190,7 @@ int MFRC522_Transceive(struct spi_device *spi, unsigned char *buffer, unsigned c
 		printk("%s: response=%02x\n", __func__, responsebuf[i]);
 	}
 	
-	/*
-	MFRC522_readnbytes(spi, FIFODataReg, responsebuf, ret);
-	*responsebuf << 8; 
-	*/
 	return 0; 
-
 }
 
 /* Store CRC_A 2byte on responsebuf buffer */ 
@@ -278,7 +280,6 @@ void  MFRC522_anti_col_loop(struct spi_device *spi, unsigned char *buf, unsigned
 
 	// loop 
 	while (knownbits < 32) {
-		printk("%s: LOOP START: NVM=%02x\n", __func__, buf[1]);
 		ret = MFRC522_Transceive(spi, buf, buflen, &(buf[knownindex]), responselen, bitframing);
 
 		ret = MFRC522_read1byte(spi, ErrorReg);
@@ -299,28 +300,25 @@ void  MFRC522_anti_col_loop(struct spi_device *spi, unsigned char *buf, unsigned
 		buf[knownindex] = buf[knownindex] + mergeval; 
 
 		if (knownbits < 32) {
-		collpos = (ret & 0x1F); 
-		collpos_bitindex = collpos % 8; 
-		collpos_byteindex = collpos / 8;
-		knownbits = collpos;
-		knownindex = knownindex + collpos_byteindex; 
-		buflen = buflen + collpos_byteindex + 1; 
+			collpos = (ret & 0x1F); 
+			collpos_bitindex = collpos % 8; 
+			collpos_byteindex = collpos / 8;
+			knownbits = collpos;
+			knownindex = knownindex + collpos_byteindex; 
+			buflen = buflen + collpos_byteindex + 1; 
 
-		mergeval = buf[knownindex]; 
+			mergeval = buf[knownindex]; 
 
-		// update NVB 
-		buf[1] = buf[1] + (collpos_byteindex << 4);
-		buf[1] = buf[1] + collpos_bitindex;
+			// update NVB 
+			buf[1] = buf[1] + (collpos_byteindex << 4);
+			buf[1] = buf[1] + collpos_bitindex;
 	
-		// rxalign, txlastbit setting 
-		bitframing = (collpos_bitindex << 4) + collpos_bitindex; 
-		printk("%s: CollPos=%02x, knownbits=%02x, knownindex=%02x, NVM=%02x, BitFramingReg=%02x\n", __func__, collpos, knownbits, knownindex, buf[1], bitframing);
-		
-		printk("%s: LOOP END\n", __func__);
+			// rxalign, txlastbit setting 
+			bitframing = (collpos_bitindex << 4) + collpos_bitindex; 
 		}
-
-
 	}
+
+
 }
 
 
@@ -331,8 +329,4 @@ void MFRC522_Select(struct spi_device *spi, unsigned char *buf, unsigned char bu
 	data = spi->dev.driver_data; 
 
 	MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
-	
-	ret = MFRC522_read1byte(spi, ErrorReg);
-	printk("ErrorReg=0x%02x\n", ret); 
-
 }

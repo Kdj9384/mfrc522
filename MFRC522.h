@@ -21,14 +21,14 @@
 #define PCD_CMD_TRANSCEIVE 0x0C
 #define PCD_CMD_SOFTRESET 0x0F 
 
-void MFRC522_Init(struct spi_device *spi); 
-void MFRC522_AntennaOn(struct spi_device *spi);
+ssize_t MFRC522_Init(struct spi_device *spi); 
+ssize_t MFRC522_AntennaOn(struct spi_device *spi);
 int MFRC522_REQA(struct spi_device *spi, unsigned char *buf, unsigned char buflen, unsigned char *responsebuf, unsigned char responsebuflen, unsigned char bitframing);
 void  MFRC522_anti_col_loop(struct spi_device *spi, unsigned char *buf, unsigned char buflen);
 int MFRC522_Transceive(struct spi_device *spi, unsigned char *buffer, unsigned char bufferlen, unsigned char *responsebuf, unsigned char responsebuflen, unsigned char bitframing); 
 int MFRC522_CalCRC(struct spi_device *spi, unsigned char *buffer, unsigned char bufferlen, unsigned char *responsebuf);
 void MFRC522_Select(struct spi_device *spi, unsigned char *buf, unsigned char buflen, unsigned char  *responsebuf, unsigned char responsebuflen, unsigned char bitframing);
 
-int  MFRC522_read1byte(struct spi_device *spi, unsigned char reg);
-int MFRC522_write1byte(struct spi_device *spi, unsigned char reg, unsigned char data); 
+unsigned char MFRC522_read1byte(struct spi_device *spi, unsigned char reg);
+ssize_t  MFRC522_write1byte(struct spi_device *spi, unsigned char reg, unsigned char data); 
 
