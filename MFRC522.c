@@ -328,5 +328,8 @@ void MFRC522_Select(struct spi_device *spi, unsigned char *buf, unsigned char bu
 	struct mfrc522dev_data *data; 
 	data = spi->dev.driver_data; 
 
-	MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
+	ret = MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
+	if (ret < 0) {
+		// failed. 	
+	}
 }

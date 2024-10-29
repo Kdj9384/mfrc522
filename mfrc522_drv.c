@@ -7,18 +7,25 @@
 
 #define BUF_LEN 4 
 
+#define MFRC522_MAJOR 154 
+#define MFRC522_MAX_MINOR 256 
+
 struct mfrc522dev_data {
 	struct spi_device *sdev;
 	struct spi_controller *scont;
+	unsigned char cmd;
+	unsigned char wdata;
+
 	
 	uint8_t atoa_buf[2];
 	uint8_t frame_buf[9]; // CMD, NVM, UID0~3, BCC, CRC_A(2byte) = 9byte
 	uint8_t sak_buf[3];
 
 	struct list_head device_entry; 
+	unsigned long  minor_idx;
 };
 
-
+DECLARE_BITMAP(minors, MFRC522_MAX_MINOR); // create 256bits bitmap. 
 
 /* attributes 
  * --------------------------------------------------------------------------
@@ -119,16 +126,21 @@ int mfrc522_probe(struct spi_device *spi)
 	INIT_LIST_HEAD(&(data->device_entry));
 
 	struct device *dev;	
+	unsigned long minor_idx;
 
 	// update device_list 
 	mutex_lock(&device_list_lock);
-	dev = device_create(mfrc522_class, &spi->dev, MKDEV(154,0), data, "mfrc522%d", 0);
+	minor_idx = find_first_zero_bit(minors, MFRC522_MAX_MINOR);
+	dev = device_create(mfrc522_class, &spi->dev, MKDEV(MFRC522_MAJOR, minor_idx), data, \
+			"mfrc522dev%d.%d", spi->master->bus_num, spi_get_chipselect(spi,0));
 	if (IS_ERR(dev)) {
 		printk("%s: device_create error %ld\n", __func__, PTR_ERR(dev));
 		return 0;
 	}
 	status = PTR_ERR_OR_ZERO(dev);
 	if (status == 0) {
+		data->minor_idx = minor_idx;
+		set_bit(minor_idx, minors);
 		list_add(&data->device_entry, &device_list);
 	}
 	mutex_unlock(&device_list_lock);
@@ -154,10 +166,12 @@ void mfrc522_remove(struct spi_device *spi)
 	struct mfrc522dev_data *data;
 	data = spi_get_drvdata(spi);
 
-	// data->sdev = NULL; 
+	mutex_lock(&device_list_lock);
 	list_del(&data->device_entry);
-	
-	device_destroy(mfrc522_class, MKDEV(154, 0));
+	device_destroy(mfrc522_class, MKDEV(MFRC522_MAJOR, data->minor_idx));
+	clear_bit(data->minor_idx, minors);
+	mutex_unlock(&device_list_lock);
+
 	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
 }
 
@@ -172,20 +186,20 @@ static ssize_t spi_mfrc522_readuid(struct file *filp, char __user *buf, size_t c
 	spi = data->sdev;
 
 	// return 0 on success 
-	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
+	status = MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
 
 	// void, filling the frame_buf 	
 	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
 	
 	// return 0 on success
-	MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
+	status = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
 
 	// void
 	MFRC522_Select(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
 
 	unsigned long missing;
 	missing = copy_to_user(buf, data->frame_buf, count); 
-	
+
 	if (missing == 0) {
 		return 0;
 	}
@@ -256,13 +270,13 @@ static int __init mfrc522_drv_init(void)
 
 	mfrc522_class = class_create("mfrc522_class");
 	if (IS_ERR(mfrc522_class)) {
-		unregister_chrdev(154, "mfrc522_chdev");
+		unregister_chrdev(MFRC522_MAJOR, "mfrc522_chdev");
 		return PTR_ERR(mfrc522_class);
 	}
 	
 	status = spi_register_driver(&mfrc522_drv);
 	if (status < 0) {
-		unregister_chrdev(154, "mfrc522_cdev");
+		unregister_chrdev(MFRC522_MAJOR, "mfrc522_cdev");
 		class_destroy(mfrc522_class);
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
@@ -276,7 +290,7 @@ static void __exit mfrc522_drv_exit(void)
 {
 	spi_unregister_driver(&mfrc522_drv);	
 	class_destroy(mfrc522_class);
-	unregister_chrdev(154, "mfrc522_cdev"); 
+	unregister_chrdev(MFRC522_MAJOR, "mfrc522_cdev"); 
 
 	printk("%s: driver exit\n", __func__);
 
