@@ -97,6 +97,7 @@ ATTRIBUTE_GROUPS(DEBUG); // DEBUG_groups
 
 static struct class *mfrc522_class;
 static LIST_HEAD(device_list); 
+static DEFINE_MUTEX(device_list_lock);
 
 /* ------------------------------------------------------------------------------- */ 
 int mfrc522_probe(struct spi_device *spi) 
@@ -114,9 +115,13 @@ int mfrc522_probe(struct spi_device *spi)
 	data->sdev = spi; 
 	data->scont = spi->controller; 
 
+	// initialize device_entry 
 	INIT_LIST_HEAD(&(data->device_entry));
 
-	struct device *dev;
+	struct device *dev;	
+
+	// update device_list 
+	mutex_lock(&device_list_lock);
 	dev = device_create(mfrc522_class, &spi->dev, MKDEV(154,0), data, "mfrc522%d", 0);
 	if (IS_ERR(dev)) {
 		printk("%s: device_create error %ld\n", __func__, PTR_ERR(dev));
@@ -126,7 +131,9 @@ int mfrc522_probe(struct spi_device *spi)
 	if (status == 0) {
 		list_add(&data->device_entry, &device_list);
 	}
+	mutex_unlock(&device_list_lock);
 
+	// add driver_data on device 
 	if (status == 0) {
 		dev_set_drvdata(&spi->dev, data); 
 	} else {
