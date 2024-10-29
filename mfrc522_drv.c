@@ -7,11 +7,9 @@
 
 #define BUF_LEN 4 
 
-struct foo_sdev_data {
+struct mfrc522dev_data {
 	struct spi_device *sdev;
 	struct spi_controller *scont;
-	unsigned char cmd; 	
-	unsigned char wdata;
 	
 	uint8_t atoa_buf[2];
 	uint8_t frame_buf[9]; // CMD, NVM, UID0~3, BCC, CRC_A(2byte) = 9byte
@@ -28,7 +26,7 @@ struct foo_sdev_data {
 ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf) 
 {
 	printk("%s: Called\n", __func__);
-	struct foo_sdev_data *data; 
+	struct mfrc522dev_data *data; 
 	struct spi_controller *scont;
 	struct spi_device *spi; 
 	int ret = -1; 
@@ -58,7 +56,7 @@ ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf)
 ssize_t DEBUG_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int ret; 
-	struct foo_sdev_data *data;
+	struct mfrc522dev_data *data;
 	struct spi_device *spi;
 	unsigned char tmp_cmd; 
 
@@ -104,9 +102,9 @@ static LIST_HEAD(device_list);
 int mfrc522_probe(struct spi_device *spi) 
 {
 	int ret = 0; int status; 
-	struct foo_sdev_data *data; 
+	struct mfrc522dev_data *data; 
 
-	data = devm_kzalloc(&spi->dev, sizeof(struct foo_sdev_data), GFP_KERNEL); 
+	data = devm_kzalloc(&spi->dev, sizeof(struct mfrc522dev_data), GFP_KERNEL); 
 	if (!data) {
 		printk("%s: devm_kzalloc FAILED\n", __func__);
 		return 0;
@@ -146,7 +144,7 @@ int mfrc522_probe(struct spi_device *spi)
 
 void mfrc522_remove(struct spi_device *spi) 
 {
-	struct foo_sdev_data *data;
+	struct mfrc522dev_data *data;
 	data = spi_get_drvdata(spi);
 
 	// data->sdev = NULL; 
@@ -161,7 +159,7 @@ static ssize_t spi_mfrc522_readuid(struct file *filp, char __user *buf, size_t c
 {
 	ssize_t status = -ENXIO; 
 	struct spi_device *spi;
-	struct foo_sdev_data *data;
+	struct mfrc522dev_data *data;
 
 	data = filp->private_data;
 	spi = data->sdev;
@@ -195,7 +193,7 @@ static ssize_t spi_mfrc522_readuid(struct file *filp, char __user *buf, size_t c
 static int  spi_mfrc522_setup(struct inode *inode, struct file *filp)
 {
 	ssize_t status = -ENXIO;
-	struct foo_sdev_data *data;
+	struct mfrc522dev_data *data;
 	struct spi_device *spi;
 
 	// ptr, type, member

@@ -325,7 +325,7 @@ void  MFRC522_anti_col_loop(struct spi_device *spi, unsigned char *buf, unsigned
 void MFRC522_Select(struct spi_device *spi, unsigned char *buf, unsigned char buflen, unsigned char *responsebuf, unsigned char responsebuflen, unsigned char bitframing) 
 {
 	int ret;
-	struct foo_sdev_data *data; 
+	struct mfrc522dev_data *data; 
 	data = spi->dev.driver_data; 
 
 	MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
