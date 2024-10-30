@@ -5,17 +5,12 @@
 
 #include "MFRC522.h" 
 
-#define BUF_LEN 4 
-
 #define MFRC522_MAJOR 154 
 #define MFRC522_MAX_MINOR 256 
 
 struct mfrc522dev_data {
 	struct spi_device *sdev;
 	struct spi_controller *scont;
-	unsigned char cmd;
-	unsigned char wdata;
-
 	
 	uint8_t atoa_buf[2];
 	uint8_t frame_buf[9]; // CMD, NVM, UID0~3, BCC, CRC_A(2byte) = 9byte
@@ -27,67 +22,14 @@ struct mfrc522dev_data {
 
 DECLARE_BITMAP(minors, MFRC522_MAX_MINOR); // create 256bits bitmap. 
 
-/* attributes 
- * --------------------------------------------------------------------------
- * */ 
 ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf) 
 {
-	printk("%s: Called\n", __func__);
-	struct mfrc522dev_data *data; 
-	struct spi_controller *scont;
-	struct spi_device *spi; 
-	int ret = -1; 
-
-	data = dev->driver_data;
-	if (!data) {
-		printk("%s: driver_data is NULL\n", __func__); 
-		return 0; 
-	}
-	scont = data->scont;
-	spi = data->sdev; 
-	if (!spi) {
-		printk("%s: spi_device is NULL\n", __func__);
-		return 0;
-	}
-
-	ret = spi_w8r8(spi, data->cmd);
-	if (ret < 0) {
-		printk("%s: spi_w8r8 FAILED\n", __func__);
-		return 0;
-	}
-	
-
-	return scnprintf(buf, PAGE_SIZE, "tx:%02x, rx:0x%02x\n", data->cmd, ret);
+	return 0; 
 }
 
 ssize_t DEBUG_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	int ret; 
-	struct mfrc522dev_data *data;
-	struct spi_device *spi;
-	unsigned char tmp_cmd; 
-
-	data = dev->driver_data;
-	spi = data->sdev; 
-	ret = kstrtou8(buf, 16, &tmp_cmd);
-	if (ret < 0) {
-		printk("%s: kstrtoint FAILED\n", __func__);
-		return count;
-	}
-
-	if (0x80 & tmp_cmd) {
-		// its for read command that update data->cmd; 
-		data->cmd = tmp_cmd;
-		printk("%s: input:%s stored:%02x\n", __func__, buf, tmp_cmd);
-		return count;
-	} 
-
-	// its for write command and buf is address and transmit random number to MFRC522
-	ret = spi_write(spi, &(data->wdata), 1); 
-	if (ret < 0) {
-		printk("%s: spi_write FAILED\n", __func__);
-	}
-	return count;
+	return count; 
 }
 
 // struct device_attribute dev_attr_name = {...}; 
@@ -261,9 +203,10 @@ struct spi_driver mfrc522_drv = {
  * */ 
 static int __init mfrc522_drv_init(void) 
 {
+	printk("%s: driver init\n", __func__);
+
 	int status;
-	
-	status = register_chrdev(154, "mfrc522_cdev", &mfrc522_fops); 
+	status = register_chrdev(MFRC522_MAJOR, "mfrc522_cdev", &mfrc522_fops); 
 	if (status < 0) {
 		return status;
 	}
@@ -280,9 +223,6 @@ static int __init mfrc522_drv_init(void)
 		class_destroy(mfrc522_class);
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
-
-	printk("%s: driver init\n", __func__);
-
 	return status;
 }
 
