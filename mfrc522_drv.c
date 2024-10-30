@@ -1,24 +1,31 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/spi/spi.h>
 #include <linux/sysfs.h>
-#include <linux/delay.h>
 
 #include "MFRC522.h" 
 
 #define BUF_LEN 4 
 
-struct foo_sdev_data {
+#define MFRC522_MAJOR 154 
+#define MFRC522_MAX_MINOR 256 
+
+struct mfrc522dev_data {
 	struct spi_device *sdev;
 	struct spi_controller *scont;
-	unsigned char cmd; 	
+	unsigned char cmd;
 	unsigned char wdata;
+
 	
 	uint8_t atoa_buf[2];
 	uint8_t frame_buf[9]; // CMD, NVM, UID0~3, BCC, CRC_A(2byte) = 9byte
 	uint8_t sak_buf[3];
+
+	struct list_head device_entry; 
+	unsigned long  minor_idx;
 };
+
+DECLARE_BITMAP(minors, MFRC522_MAX_MINOR); // create 256bits bitmap. 
 
 /* attributes 
  * --------------------------------------------------------------------------
@@ -26,12 +33,10 @@ struct foo_sdev_data {
 ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf) 
 {
 	printk("%s: Called\n", __func__);
-	struct foo_sdev_data *data; 
+	struct mfrc522dev_data *data; 
 	struct spi_controller *scont;
 	struct spi_device *spi; 
 	int ret = -1; 
-	uint8_t readbuf[BUF_LEN];  
-	uint8_t writebuf[BUF_LEN];
 
 	data = dev->driver_data;
 	if (!data) {
@@ -58,7 +63,7 @@ ssize_t DEBUG_show(struct device *dev, struct device_attribute *attr, char *buf)
 ssize_t DEBUG_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int ret; 
-	struct foo_sdev_data *data;
+	struct mfrc522dev_data *data;
 	struct spi_device *spi;
 	unsigned char tmp_cmd; 
 
@@ -95,18 +100,19 @@ static struct attribute *DEBUG_attrs[] = {
 
 ATTRIBUTE_GROUPS(DEBUG); // DEBUG_groups 
 
-/* driver 
- * -------------------------------------------------------------------------------
- * */ 
+
+
+static struct class *mfrc522_class;
+static LIST_HEAD(device_list); 
+static DEFINE_MUTEX(device_list_lock);
+
+/* ------------------------------------------------------------------------------- */ 
 int mfrc522_probe(struct spi_device *spi) 
 {
-	printk("%s: =============== probe started ==============\n", __func__); 
-	int ret = 0;
-	int cnt; 
-	struct foo_sdev_data *data; 
+	int ret = 0; int status; 
+	struct mfrc522dev_data *data; 
 
-	/* make driver data */ 
-	data = devm_kzalloc(&spi->dev, sizeof(struct foo_sdev_data), GFP_KERNEL); 
+	data = devm_kzalloc(&spi->dev, sizeof(struct mfrc522dev_data), GFP_KERNEL); 
 	if (!data) {
 		printk("%s: devm_kzalloc FAILED\n", __func__);
 		return 0;
@@ -115,58 +121,122 @@ int mfrc522_probe(struct spi_device *spi)
 	spi->mode = SPI_MODE_0;
 	data->sdev = spi; 
 	data->scont = spi->controller; 
-	data->cmd = 0x92;
-	data->wdata = 0x28;
 
-	dev_set_drvdata(&spi->dev, data); 
+	// initialize device_entry 
+	INIT_LIST_HEAD(&(data->device_entry));
 
-	MFRC522_Init(spi);
-	printk("%s:Init() complete\n", __func__);
+	struct device *dev;	
+	unsigned long minor_idx;
 
-	MFRC522_AntennaOn(spi);
-	printk("%s:AntennaOn() complete\n", __func__);
- 
-	MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
-	printk("%s:REQA complete\n", __func__);
-	
-	// spi, buf, buflen
-	printk("%s: Anti-collision loop started\n", __func__);
-	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
-	
-	/***** Calculate CRC ******/ 
-	printk("%s: CalCRC started\n", __func__);
-	data->frame_buf[0] = PICC_CMD_SEL_CL1;
-	data->frame_buf[1] = 0x70; 	
-	ret = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
-	
-	/****** SELECT ******/ 	
-	MFRC522_Transceive(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
-
-	ret = MFRC522_read1byte(spi, 0x06);
-	printk("ErrorReg=0x%02x\n", ret); 
-
-	printk("ATOA: 0x%02x %02x\n", data->atoa_buf[0], data->atoa_buf[1]); 
-	printk("SAK: 0x%02x %02x %02x\n", data->sak_buf[0], data->sak_buf[1], data->sak_buf[2]); 
-	for(int i = 0; i < 9; i++) {
-		printk("FRAME: 0x%02x\n", data->frame_buf[i]);
+	// update device_list 
+	mutex_lock(&device_list_lock);
+	minor_idx = find_first_zero_bit(minors, MFRC522_MAX_MINOR);
+	dev = device_create(mfrc522_class, &spi->dev, MKDEV(MFRC522_MAJOR, minor_idx), data, \
+			"mfrc522dev%d.%d", spi->master->bus_num, spi_get_chipselect(spi,0));
+	if (IS_ERR(dev)) {
+		printk("%s: device_create error %ld\n", __func__, PTR_ERR(dev));
+		return 0;
 	}
+	status = PTR_ERR_OR_ZERO(dev);
+	if (status == 0) {
+		data->minor_idx = minor_idx;
+		set_bit(minor_idx, minors);
+		list_add(&data->device_entry, &device_list);
+	}
+	mutex_unlock(&device_list_lock);
 
-	/****** make Attribute ******/ 
+	// add driver_data on device 
+	if (status == 0) {
+		dev_set_drvdata(&spi->dev, data); 
+	} else {
+		kfree(data);
+	}
+	
+	// add attribute groups dynamically 
 	ret = sysfs_create_groups(&spi->dev.kobj, DEBUG_groups);
 	if (ret < 0) {
 		printk("%s: sysfs_create_groups FAILED!! %d\n", __func__, ret); 
 	}
-
-	printk("spi: spi's constoller=%s, max_speed_hz=%u, chip_select=%u, bits_per_word=%u, mode=%u, bus_num=%u\n", spi->controller->dev.kobj.name, spi->max_speed_hz, spi->chip_select, spi->bits_per_word, spi->mode, spi->controller->bus_num);
 
 	return ret; 
 }
 
 void mfrc522_remove(struct spi_device *spi) 
 {
-	printk("%s: \n", __func__);
+	struct mfrc522dev_data *data;
+	data = spi_get_drvdata(spi);
+
+	mutex_lock(&device_list_lock);
+	list_del(&data->device_entry);
+	device_destroy(mfrc522_class, MKDEV(MFRC522_MAJOR, data->minor_idx));
+	clear_bit(data->minor_idx, minors);
+	mutex_unlock(&device_list_lock);
+
 	sysfs_remove_groups(&spi->dev.kobj, DEBUG_groups);
 }
+
+
+static ssize_t spi_mfrc522_readuid(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+{
+	ssize_t status = -ENXIO; 
+	struct spi_device *spi;
+	struct mfrc522dev_data *data;
+
+	data = filp->private_data;
+	spi = data->sdev;
+
+	// return 0 on success 
+	status = MFRC522_REQA(spi, data->frame_buf, 1, data->atoa_buf, 2, 0x07);
+
+	// void, filling the frame_buf 	
+	MFRC522_anti_col_loop(spi, data->frame_buf, 2);
+	
+	// return 0 on success
+	status = MFRC522_CalCRC(spi, data->frame_buf, 7, &(data->frame_buf[7]));
+
+	// void
+	MFRC522_Select(spi, data->frame_buf, 9, data->sak_buf, 3, 0x00);
+
+	unsigned long missing;
+	missing = copy_to_user(buf, data->frame_buf, count); 
+
+	if (missing == 0) {
+		return 0;
+	}
+	if (missing == count) {
+		return -EFAULT;
+	}
+	
+	return count - missing;
+}
+
+// Return 0 on Success.  
+static int  spi_mfrc522_setup(struct inode *inode, struct file *filp)
+{
+	ssize_t status = -ENXIO;
+	struct mfrc522dev_data *data;
+	struct spi_device *spi;
+
+	// ptr, type, member
+	data = list_first_entry(&device_list, typeof(*data), device_entry);
+
+	filp->private_data = data;
+	spi = data->sdev; 
+
+	status = MFRC522_Init(spi);
+	printk("Init(): status=%ld\n", status);
+
+	status = MFRC522_AntennaOn(spi);
+	printk("AntennaOn(): status=%ld\n", status);
+
+	return 0;
+}
+
+static const struct file_operations mfrc522_fops = {
+	.owner = THIS_MODULE, 
+	.read = spi_mfrc522_readuid,
+	.open = spi_mfrc522_setup,
+};
 
 const struct of_device_id of_spi_table[] = {
 	{.compatible="nxp,mfrc522_test", }, 
@@ -191,17 +261,39 @@ struct spi_driver mfrc522_drv = {
  * */ 
 static int __init mfrc522_drv_init(void) 
 {
-	int ret = 0;
-	ret = spi_register_driver(&mfrc522_drv);
-	if (ret < 0) {
+	int status;
+	
+	status = register_chrdev(154, "mfrc522_cdev", &mfrc522_fops); 
+	if (status < 0) {
+		return status;
+	}
+
+	mfrc522_class = class_create("mfrc522_class");
+	if (IS_ERR(mfrc522_class)) {
+		unregister_chrdev(MFRC522_MAJOR, "mfrc522_chdev");
+		return PTR_ERR(mfrc522_class);
+	}
+	
+	status = spi_register_driver(&mfrc522_drv);
+	if (status < 0) {
+		unregister_chrdev(MFRC522_MAJOR, "mfrc522_cdev");
+		class_destroy(mfrc522_class);
 		printk("%s: spi_register_driver() FAILED\n", __func__);
 	}	
-	return ret;
+
+	printk("%s: driver init\n", __func__);
+
+	return status;
 }
 
 static void __exit mfrc522_drv_exit(void)
 {
-	spi_unregister_driver(&mfrc522_drv);
+	spi_unregister_driver(&mfrc522_drv);	
+	class_destroy(mfrc522_class);
+	unregister_chrdev(MFRC522_MAJOR, "mfrc522_cdev"); 
+
+	printk("%s: driver exit\n", __func__);
+
 }
 
 module_init(mfrc522_drv_init);
