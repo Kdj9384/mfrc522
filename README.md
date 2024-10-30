@@ -1,30 +1,51 @@
-# mfrc522
-test mfrc522 spi driver
+# mfrc522 spi driver
+mfrc522 spi driver based on Linux kernel v6.6 
 
-## Terms of Abbreviations
-ATQA : Answer to Reqeust Type A   
-ATS : Answer To Select  
-CL : Cascading Level   
-CT : Cascading Tag  
-NVB : Number of Valid Bits  
-PCD : Proximity Coupling Device (“Reader”)  
-PICC : Proximity Intergrated Circuit Card (”Card”), Tag  
-REQA : REQuest Type A   
-RATS : Request for Answer To Select   
-SAK : Select ACK   
-SL : Security Level  
-PPS : Protocol Parameter Selection
+## 1. Key Features
+- give spi interface to communicate with RFID module with MFRC522.
+- give implementation of ISO/IEC 14443-3 A protocol
+- give userspace interface as character device, `mfrc522dev0.0` 
 
 
-## MFRC522 드라이버 Features
-- 디바이스 트리 오버레이
-- Supports ISO/IEC 14443 A/MIFARE and NTAG
-    - ISO/IEC 14443-3 : 초기화 및 충돌방지 
+## 2. Implementation 
+- mfrc522_drv.c
+    - spi driver
+    - create class and character device for every matched device.
+        - open()
+            - setup the device
+        - read()
+            - process the sequence (reqa, anti-collision loop, select)
+- MFRC522.c
+    - implementaion of MFRC522 functions(communicate with PICC). 
+- MFRC522.h
+    - define macros for register address and commands.
+    - define prototype of MFRC522 functions.
+- device_list & device_list_lock
+- bitmap to assign minor number
 
-## Reference 
-- https://m.blog.naver.com/ittalentdonation/221215499032
+
+## 3. How to use
+1. build with `Makefile`
+2. `insmod *.ko`
+3. build `test.c` and run it 
+
+## 4. Terms of Abbreviations
+|Terms|Contents|
+|---|---|
+|ATQA|Answer to Reqeust Type A  | 
+|ATS | Answer To Select  |
+|CL | Cascading Level   |
+|CT | Cascading Tag  |
+|NVB | Number of Valid Bits  |
+|PCD | Proximity Coupling Device (“Reader”)  |
+|PICC | Proximity Intergrated Circuit Card (”Card”), Tag  |
+|REQA | REQuest Type A   |
+|RATS | Request for Answer To Select   |
+|SAK | Select ACK   |
+|SL |Security Level  |
+|PPS | Protocol Parameter Selection|
+
+## 6. Reference 
 - https://www.nxp.com/docs/en/data-sheet/MFRC522.pdf
 - https://github.com/libdriver/mfrc522/blob/main/src/driver_mfrc522.h#L361
-- http://www.airspayce.com/mikem/bcm2835/group__spi.html#gad25421b3a4a6ca280dfdd39c94c3279a
-- https://community.nxp.com/pwmxy87654/attachments/pwmxy87654/nfc/4928/1/ISO-IEC%2014443-3_anticollision.pdf
 - https://www.nxp.com/docs/en/application-note/AN10834.pdf
