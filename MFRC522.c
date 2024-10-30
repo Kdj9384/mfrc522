@@ -176,7 +176,7 @@ int MFRC522_Transceive(struct spi_device *spi, unsigned char *buffer, unsigned c
 
 	/* get the size of the response data (byte) */
 	ret = MFRC522_read1byte(spi, FIFOLevelReg);
-	printk("%s: Size of response:%02x\n", __func__, ret);
+	printk("%s:Size of response: %02x\n", __func__, ret);
 
 	/* read the data from FIFO */ 
 
@@ -187,7 +187,6 @@ int MFRC522_Transceive(struct spi_device *spi, unsigned char *buffer, unsigned c
 			break;
 		}
 		responsebuf[i] = MFRC522_read1byte(spi, FIFODataReg);
-		printk("%s: response=%02x\n", __func__, responsebuf[i]);
 	}
 	
 	return 0; 
@@ -215,7 +214,7 @@ int MFRC522_CalCRC(struct spi_device *spi, unsigned char *buffer, unsigned char 
 		ret = MFRC522_read1byte(spi, DivIrqReg);
 		/* 0X04 = CRC IRQ */ 
 		if (ret & 0x04) {
-			printk("CalCRC: DivIrqReg:CRCIrq is Set!!\n");
+			// DivIrqReg:CRCIrq is set 
 			break;
 		}
 		if (cnt-- < 0) {
@@ -226,10 +225,10 @@ int MFRC522_CalCRC(struct spi_device *spi, unsigned char *buffer, unsigned char 
 	MFRC522_write1byte(spi, CommandReg, 0x00);
 	ret = MFRC522_read1byte(spi, CRCResultRegL); // LSB
 	responsebuf[0] = ret;
-	printk("CRC: responesbuf 0x%02x\n", ret);
+	printk("CRC: 0x%02x\n", ret);
 	ret = MFRC522_read1byte(spi, CRCResultRegH); // MSB 
 	responsebuf[1] = ret;
-	printk("CRC: responsebuf 0x%02x\n", ret);
+	printk("CRC: 0x%02x\n", ret);
 	return 0; 
 }
 
@@ -245,7 +244,7 @@ int MFRC522_REQA(struct spi_device *spi, unsigned char *buf, unsigned char bufle
 
 	// print 
 	for(int i = 0; i < responsebuflen; i++) {
-		printk("ATOA: %02x\n", responsebuf[i]);
+		printk("ATOA: 0x%02x\n", responsebuf[i]);
 	}
 	return 0; 
 }
@@ -282,17 +281,21 @@ void  MFRC522_anti_col_loop(struct spi_device *spi, unsigned char *buf, unsigned
 	while (knownbits < 32) {
 		ret = MFRC522_Transceive(spi, buf, buflen, &(buf[knownindex]), responselen, bitframing);
 
+		// print
+		for(int i = knownindex; i < knownindex + responselen; i++) {
+			printk("FRAME_BUF: 0x%02x\n", buf[i]);
+		}
+
 		ret = MFRC522_read1byte(spi, ErrorReg);
 		if (ret & 0x08) {
 			printk("%s: ErrorReg, CollErr occur\n", __func__);
 		}
 
 		ret = MFRC522_read1byte(spi, CollReg);
-		printk("%s: CollReg = %02x\n", __func__, ret);
 
 		if ((ret & 0x20) == 0x20) {
 			// no collision, all uid, 32bits are known
-			printk("%s: no collision, ret=%02x\n", __func__, ret);
+			printk("%s: no collision\n", __func__);
 			knownbits = 32; 
 		}
 
@@ -331,5 +334,8 @@ void MFRC522_Select(struct spi_device *spi, unsigned char *buf, unsigned char bu
 	ret = MFRC522_Transceive(spi, buf, buflen, responsebuf, responsebuflen, bitframing);
 	if (ret < 0) {
 		// failed. 	
+	}
+	for(int i = 0; i < 3; i++) {
+		printk("SAK: 0x%02x\n", responsebuf[i]);
 	}
 }
